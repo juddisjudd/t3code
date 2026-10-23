@@ -152,7 +152,7 @@ export function McpServersDialogHost(props: {
         if (!nextOpen) closeThreadOverlay(mcpServersDialogAtom);
       }}
     >
-      <DialogPopup>
+      <DialogPopup className="max-w-4xl">
         {props.threadId === null ? null : (
           <McpServersPanel environmentId={props.environmentId} threadId={props.threadId} />
         )}
