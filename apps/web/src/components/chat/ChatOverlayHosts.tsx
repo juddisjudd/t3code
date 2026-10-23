@@ -23,8 +23,9 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
+import { Dialog, DialogPopup } from "../ui/dialog";
 import { WizardPopup } from "../ui/wizard";
+import { McpServersPanel } from "./McpServersDialog";
 
 /**
  * Open state for overlays the chat view hosts. It lives in atoms rather than
@@ -128,6 +129,34 @@ export function DeviceSetupDialogHost(props: {
           />
         ) : null}
       </WizardPopup>
+    </Dialog>
+  );
+}
+
+const mcpServersDialogAtom = makeThreadOverlayAtom<true>("mcp-servers-dialog");
+
+export function openMcpServersDialog(threadKey: string): void {
+  appAtomRegistry.set(mcpServersDialogAtom, { threadKey, value: true });
+}
+
+export function McpServersDialogHost(props: {
+  readonly threadKey: string | null;
+  readonly environmentId: EnvironmentId;
+  readonly threadId: ThreadId | null;
+}) {
+  const open = useThreadOverlay(mcpServersDialogAtom, props.threadKey) !== null;
+  return (
+    <Dialog
+      open={open && props.threadId !== null}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) closeThreadOverlay(mcpServersDialogAtom);
+      }}
+    >
+      <DialogPopup>
+        {props.threadId === null ? null : (
+          <McpServersPanel environmentId={props.environmentId} threadId={props.threadId} />
+        )}
+      </DialogPopup>
     </Dialog>
   );
 }

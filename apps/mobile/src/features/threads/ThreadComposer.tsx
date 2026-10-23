@@ -27,6 +27,8 @@ import {
   hasProviderUsageLimits,
   isUsageLimitsCommand,
 } from "@t3tools/shared/usageLimits";
+import { isMcpServersCommand } from "@t3tools/shared/mcpServersCommand";
+import { offersThreadMcpServers } from "@t3tools/client-runtime/thread-mcp-servers";
 import { StackActions, useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
@@ -555,6 +557,16 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     }
     return report !== null;
   };
+  const openMcpServers =
+    !props.isDraft && offersThreadMcpServers(selectedProviderStatus?.driver)
+      ? () => {
+          Keyboard.dismiss();
+          navigation.navigate("ThreadMcpServers", {
+            environmentId: props.environmentId,
+            threadId: props.selectedThread.id,
+          });
+        }
+      : undefined;
 
   const composerMenu = useComposerCommandMenu({
     draftMessage: draftMessage,
@@ -579,6 +591,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     offersUsageLimits: usageLimitsOffered,
     onUsageLimits:
       usageLimitsOffered && draftAttachments.length === 0 ? openUsageLimits : undefined,
+    onMcpServers: draftAttachments.length === 0 ? openMcpServers : undefined,
   });
   const voiceInput = useVoiceInputController({
     ownerKey: composerDraftKey,
@@ -680,6 +693,11 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
       return;
     if (usageLimitsOffered && isUsageLimitsCommand(draftMessage) && draftAttachments.length === 0) {
       if (openUsageLimits()) onChangeDraftMessage("");
+      return;
+    }
+    if (openMcpServers && isMcpServersCommand(draftMessage) && draftAttachments.length === 0) {
+      openMcpServers();
+      onChangeDraftMessage("");
       return;
     }
     const threadKey = scopedThreadKey(props.environmentId, props.selectedThread.id);

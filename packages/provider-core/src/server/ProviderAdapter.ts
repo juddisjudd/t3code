@@ -1,4 +1,4 @@
-import type { OrchestrationV2HistoricalMessage } from "@t3tools/contracts";
+import type { OrchestrationV2HistoricalMessage, ThreadMcpServer } from "@t3tools/contracts";
 import {
   ChatAttachment,
   CheckpointId,
@@ -37,6 +37,7 @@ import {
 import * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
 import type * as Effect from "effect/Effect";
+import type * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 
@@ -542,6 +543,27 @@ export interface ProviderAdapterV2McpApps {
   }) => Effect.Effect<{ readonly contents: ReadonlyArray<unknown> }, ProviderAdapterV2Error>;
 }
 
+type ProviderAdapterV2McpServersResult = Effect.Effect<
+  Option.Option<ReadonlyArray<ThreadMcpServer>>,
+  ProviderAdapterV2Error
+>;
+
+/** None means the provider thread has no running native session to ask. */
+export interface ProviderAdapterV2McpServers {
+  readonly list: (input: {
+    readonly providerThread: OrchestrationV2ProviderThread;
+  }) => ProviderAdapterV2McpServersResult;
+  readonly reconnect: (input: {
+    readonly providerThread: OrchestrationV2ProviderThread;
+    readonly server: string;
+  }) => ProviderAdapterV2McpServersResult;
+  readonly setEnabled: (input: {
+    readonly providerThread: OrchestrationV2ProviderThread;
+    readonly server: string;
+    readonly enabled: boolean;
+  }) => ProviderAdapterV2McpServersResult;
+}
+
 export type ProviderAdapterV2SubagentOutcome = {
   readonly status: "completed" | "failed" | "cancelled";
   readonly completedAt: NonNullable<OrchestrationV2Subagent["completedAt"]>;
@@ -636,6 +658,7 @@ export interface ProviderAdapterV2SessionRuntime {
    * calls stay plain tool rows.
    */
   readonly mcpApps?: ProviderAdapterV2McpApps;
+  readonly mcpServers?: ProviderAdapterV2McpServers;
   readonly rollbackThread: (
     input: ProviderAdapterV2RollbackThreadInput,
   ) => Effect.Effect<ProviderAdapterV2ThreadSnapshot, ProviderAdapterV2Error>;

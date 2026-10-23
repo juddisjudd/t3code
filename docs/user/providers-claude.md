@@ -75,6 +75,17 @@ Claude Code holds the turn until that window reopens, so it can keep showing as
 working. Wait for the reset, or stop the turn and continue later. The warning's
 timestamp shows when the displayed wait started.
 
+## MCP servers
+
+Send `/mcp` in a Claude thread to see the MCP servers its session loaded. Servers
+are grouped by where they are configured, with each server's status, connection
+error, and tools. **Reconnect** retries a server after you fix it, and the switch
+turns a server off or on. These actions need `orchestration:operate`.
+
+The list comes from the running agent. In a new thread, or after the agent stops,
+send a message first. A server that needs sign-in must still be authorized from
+Claude Code in a terminal on the host machine.
+
 ## Skills
 
 Claude skills come from the config directory's `skills` folder and the project's

@@ -14,6 +14,7 @@ import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { MCP_SERVERS_COMMAND } from "@t3tools/shared/mcpServersCommand";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import {
@@ -467,6 +468,7 @@ export const probeClaudeWorkspaceSnapshot = Effect.fn("probeClaudeWorkspaceSnaps
     skills,
     slashCommands: dedupeSlashCommands([
       COMPACT_SLASH_COMMAND,
+      MCP_SERVERS_COMMAND,
       ...(capabilities?.slashCommands ?? []),
     ]),
     slashCommandsPending: !capabilities,
@@ -598,7 +600,11 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   const probeFailure =
     probeResult && Result.isFailure(probeResult) ? probeResult.failure : undefined;
   const skills = yield* discoverClaudeSkills(claudeSettings, cwd, resolvedEnvironment);
-  const slashCommands = [COMPACT_SLASH_COMMAND, ...(capabilities?.slashCommands ?? [])];
+  const slashCommands = [
+    COMPACT_SLASH_COMMAND,
+    MCP_SERVERS_COMMAND,
+    ...(capabilities?.slashCommands ?? []),
+  ];
   const dedupedSlashCommands = dedupeSlashCommands(slashCommands);
 
   if (!capabilities) {

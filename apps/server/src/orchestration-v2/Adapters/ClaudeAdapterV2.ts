@@ -17,6 +17,7 @@ import {
   mergeClaudeWorkflowProgress,
   parseClaudeWorkflowRunHandles,
 } from "./claudeWorkflowProgress.ts";
+import { claudeMcpServers } from "./claudeMcpServers.ts";
 
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
 import { normalizeClaudeTurnTokenUsage } from "../../provider/ClaudeTurnTokenUsage.ts";
@@ -30,6 +31,7 @@ import {
   getSubagentMessages,
   query,
   resolveSettings as resolveClaudeSettings,
+  type McpServerStatus,
   type Options as ClaudeQueryOptions,
   type PermissionMode,
   type PermissionResult,
@@ -519,6 +521,17 @@ export interface ClaudeAgentSdkQuerySession {
   readonly backgroundTasks: (
     toolUseId: string,
   ) => Effect.Effect<boolean, ClaudeAgentSdkQueryRunnerError>;
+  readonly mcpServerStatus: Effect.Effect<
+    ReadonlyArray<McpServerStatus>,
+    ClaudeAgentSdkQueryRunnerError
+  >;
+  readonly reconnectMcpServer: (
+    serverName: string,
+  ) => Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
+  readonly toggleMcpServer: (
+    serverName: string,
+    enabled: boolean,
+  ) => Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
   readonly interrupt: Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
   readonly close: Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
 }
@@ -710,6 +723,30 @@ export type ClaudeAgentSdkProtocolLogEvent =
       readonly payload: {
         readonly type: "query.background_tasks";
         readonly toolUseId: string;
+      };
+    }
+  | {
+      readonly direction: "outgoing";
+      readonly stage: "decoded";
+      readonly payload: {
+        readonly type: "query.mcp_server_status";
+      };
+    }
+  | {
+      readonly direction: "outgoing";
+      readonly stage: "decoded";
+      readonly payload: {
+        readonly type: "query.reconnect_mcp_server";
+        readonly serverName: string;
+      };
+    }
+  | {
+      readonly direction: "outgoing";
+      readonly stage: "decoded";
+      readonly payload: {
+        readonly type: "query.toggle_mcp_server";
+        readonly serverName: string;
+        readonly enabled: boolean;
       };
     }
   | {
@@ -1117,6 +1154,45 @@ export const layerQueryRunner: Layer.Layer<
                   direction: "outgoing",
                   stage: "decoded",
                   payload: { type: "query.background_tasks", toolUseId },
+                }),
+              ),
+            ),
+          // The status response carries server headers and env, so only the request is logged.
+          mcpServerStatus: Effect.tryPromise({
+            try: () => queryRuntime.mcpServerStatus(),
+            catch: (cause) => queryRunnerError(cause, "mcpServerStatus"),
+          }).pipe(
+            Effect.tap(() =>
+              logProtocolEvent({
+                direction: "outgoing",
+                stage: "decoded",
+                payload: { type: "query.mcp_server_status" },
+              }),
+            ),
+          ),
+          reconnectMcpServer: (serverName) =>
+            Effect.tryPromise({
+              try: () => queryRuntime.reconnectMcpServer(serverName),
+              catch: (cause) => queryRunnerError(cause, "reconnectMcpServer"),
+            }).pipe(
+              Effect.tap(() =>
+                logProtocolEvent({
+                  direction: "outgoing",
+                  stage: "decoded",
+                  payload: { type: "query.reconnect_mcp_server", serverName },
+                }),
+              ),
+            ),
+          toggleMcpServer: (serverName, enabled) =>
+            Effect.tryPromise({
+              try: () => queryRuntime.toggleMcpServer(serverName, enabled),
+              catch: (cause) => queryRunnerError(cause, "toggleMcpServer"),
+            }).pipe(
+              Effect.tap(() =>
+                logProtocolEvent({
+                  direction: "outgoing",
+                  stage: "decoded",
+                  payload: { type: "query.toggle_mcp_server", serverName, enabled },
                 }),
               ),
             ),
@@ -10058,6 +10134,44 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           },
         );
 
+        const mcpServerRequest = Effect.fn("ClaudeAdapterV2.mcpServerRequest")(function* (
+          providerThread: OrchestrationV2ProviderThread,
+          action: (
+            query: ClaudeAgentSdkQuerySession,
+          ) => Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>,
+        ) {
+          const liveQuery = yield* Ref.get(queryContext);
+          if (
+            liveQuery === null ||
+            liveQuery.stopping ||
+            liveQuery.nativeThreadId !== providerThread.nativeThreadRef?.nativeId
+          ) {
+            return Option.none();
+          }
+          const statuses = yield* action(liveQuery.query).pipe(
+            Effect.andThen(liveQuery.query.mcpServerStatus),
+            Effect.mapError(
+              (cause) =>
+                new ProviderAdapter.ProviderAdapterProtocolError({
+                  driver: CLAUDE_PROVIDER,
+                  detail: "MCP server request failed",
+                  cause,
+                }),
+            ),
+            Effect.timeoutOrElse({
+              duration: CLAUDE_MCP_REGISTRATION_TIMEOUT,
+              orElse: () =>
+                Effect.fail(
+                  new ProviderAdapter.ProviderAdapterProtocolError({
+                    driver: CLAUDE_PROVIDER,
+                    detail: "Claude Code did not answer the MCP server request",
+                  }),
+                ),
+            }),
+          );
+          return Option.some(claudeMcpServers(statuses));
+        });
+
         const runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime = {
           instanceId: adapterOptions.instanceId,
           driver: CLAUDE_PROVIDER,
@@ -10207,6 +10321,16 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               ),
             );
           }),
+          mcpServers: {
+            list: ({ providerThread }) => mcpServerRequest(providerThread, () => Effect.void),
+            // A failed reconnect shows in the refreshed status, with Claude's error text.
+            reconnect: ({ providerThread, server }) =>
+              mcpServerRequest(providerThread, (query) =>
+                query.reconnectMcpServer(server).pipe(Effect.ignore),
+              ),
+            setEnabled: ({ providerThread, server, enabled }) =>
+              mcpServerRequest(providerThread, (query) => query.toggleMcpServer(server, enabled)),
+          },
           interruptTurn,
           stopSubagent: Effect.fn("ClaudeAdapterV2.stopSubagent")(function* (input) {
             const existing = yield* Ref.get(queryContext);

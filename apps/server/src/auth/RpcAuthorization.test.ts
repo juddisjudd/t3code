@@ -12,6 +12,7 @@ import {
   AuthSourceControlWriteScope,
   AuthTerminalReadScope,
   AuthTerminalOperateScope,
+  clientRpcRequiredScopes,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -61,6 +62,19 @@ describe("RPC authorization scopes", () => {
       WS_METHODS.terminalClose,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTerminalOperateScope);
+    }
+  });
+
+  it("lets read-only clients see a thread's MCP servers but not reconnect or toggle them", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.threadMcpServersList)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    for (const method of [
+      WS_METHODS.threadMcpServersReconnect,
+      WS_METHODS.threadMcpServersSetEnabled,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+      expect(clientRpcRequiredScopes(method, undefined)).toEqual([AuthOrchestrationOperateScope]);
     }
   });
 

@@ -15,6 +15,13 @@ import {
   McpAppUpdateModelContextInput,
 } from "./mcpApps.ts";
 import {
+  ThreadMcpServerReconnectInput,
+  ThreadMcpServerSetEnabledInput,
+  ThreadMcpServersError,
+  ThreadMcpServersListInput,
+  ThreadMcpServersResult,
+} from "./threadMcpServers.ts";
+import {
   ChatGptReconnectProfileInput,
   ChatGptReconnectProfile,
   ChatGptImportProfileInput,
@@ -406,6 +413,10 @@ export const WS_METHODS = {
   mcpAppsToolInfo: "mcpApps.toolInfo",
   mcpAppsReadResource: "mcpApps.readResource",
   mcpAppsUpdateModelContext: "mcpApps.updateModelContext",
+
+  threadMcpServersList: "threadMcpServers.list",
+  threadMcpServersReconnect: "threadMcpServers.reconnect",
+  threadMcpServersSetEnabled: "threadMcpServers.setEnabled",
 
   providerUploadFeedback: "provider.uploadFeedback",
   providerAuthStart: "provider.auth.start",
@@ -1338,6 +1349,24 @@ const WsMcpAppsReadResourceRpc = Rpc.make(WS_METHODS.mcpAppsReadResource, {
   error: Schema.Union([McpAppRequestError, EnvironmentAuthorizationError]),
 });
 
+const WsThreadMcpServersListRpc = Rpc.make(WS_METHODS.threadMcpServersList, {
+  payload: ThreadMcpServersListInput,
+  success: ThreadMcpServersResult,
+  error: Schema.Union([ThreadMcpServersError, EnvironmentAuthorizationError]),
+});
+
+const WsThreadMcpServersReconnectRpc = Rpc.make(WS_METHODS.threadMcpServersReconnect, {
+  payload: ThreadMcpServerReconnectInput,
+  success: ThreadMcpServersResult,
+  error: Schema.Union([ThreadMcpServersError, EnvironmentAuthorizationError]),
+});
+
+const WsThreadMcpServersSetEnabledRpc = Rpc.make(WS_METHODS.threadMcpServersSetEnabled, {
+  payload: ThreadMcpServerSetEnabledInput,
+  success: ThreadMcpServersResult,
+  error: Schema.Union([ThreadMcpServersError, EnvironmentAuthorizationError]),
+});
+
 const WsProviderUploadFeedbackRpc = Rpc.make(WS_METHODS.providerUploadFeedback, {
   payload: ProviderUploadFeedbackInput,
   success: ProviderUploadFeedbackResult,
@@ -2008,6 +2037,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsMcpAppsToolInfoRpc,
   WsMcpAppsReadResourceRpc,
   WsMcpAppsUpdateModelContextRpc,
+  WsThreadMcpServersListRpc,
+  WsThreadMcpServersReconnectRpc,
+  WsThreadMcpServersSetEnabledRpc,
   WsProviderUploadFeedbackRpc,
   WsSubscribeVcsStatusRpc,
   WsSubscribeWorktreeSetupRpc,

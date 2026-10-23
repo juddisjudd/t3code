@@ -23,6 +23,7 @@ import {
   readComposerDraftSelection,
   setComposerDraftContext,
 } from "../../state/use-composer-drafts";
+import { MCP_SERVERS_COMMAND } from "@t3tools/shared/mcpServersCommand";
 import { USAGE_LIMITS_COMMAND } from "@t3tools/shared/usageLimits";
 import {
   detectComposerTrigger,
@@ -185,6 +186,7 @@ export function useComposerCommandMenu({
   onChangeDraftMessage,
   onUpdateInteractionMode,
   onUsageLimits,
+  onMcpServers,
 }: {
   readonly draftMessage: string;
   readonly ownerKey: string | null;
@@ -203,6 +205,7 @@ export function useComposerCommandMenu({
   readonly onChangeDraftMessage: (value: string) => void;
   readonly onUpdateInteractionMode?: (mode: ProviderInteractionMode) => void;
   readonly onUsageLimits?: () => void;
+  readonly onMcpServers?: () => void;
 }) {
   const [selection, setSelection] = useState(() => composerSelectionAtEnd(draftMessage));
   const previousOwnerKeyRef = useRef(ownerKey);
@@ -586,15 +589,19 @@ export function useComposerCommandMenu({
       return;
     }
 
-    if (
-      item.type === "provider-slash-command" &&
-      item.command.name === USAGE_LIMITS_COMMAND.name &&
-      onUsageLimits
-    ) {
+    const openCommandPanel =
+      item.type !== "provider-slash-command"
+        ? undefined
+        : item.command.name === USAGE_LIMITS_COMMAND.name
+          ? onUsageLimits
+          : item.command.name === MCP_SERVERS_COMMAND.name
+            ? onMcpServers
+            : undefined;
+    if (openCommandPanel) {
       const cleared = replaceTextRange(draftMessage, trigger.rangeStart, trigger.rangeEnd, "");
       setSelection({ start: cleared.cursor, end: cleared.cursor });
       onChangeDraftMessage(cleared.text);
-      onUsageLimits();
+      openCommandPanel();
       return;
     }
 

@@ -729,6 +729,9 @@ describe("ClaudeAdapterV2 Auto-accept edits", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   backgroundTasks: () => Effect.succeed(false),
+                  mcpServerStatus: Effect.succeed([]),
+                  reconnectMcpServer: () => Effect.void,
+                  toggleMcpServer: () => Effect.void,
                   stopTask: () => Effect.void,
                   interrupt: Effect.void,
                   close: Effect.void,
@@ -838,6 +841,9 @@ describe("ClaudeAdapterV2 append-system-prompt-file launch argument", () => {
               applyFlagSettings: () => Effect.void,
               setPermissionMode: () => Effect.void,
               backgroundTasks: () => Effect.succeed(false),
+              mcpServerStatus: Effect.succeed([]),
+              reconnectMcpServer: () => Effect.void,
+              toggleMcpServer: () => Effect.void,
               stopTask: () => Effect.void,
               interrupt: Effect.void,
               close: Effect.void,
@@ -1018,6 +1024,9 @@ const captureSdkExecutablePaths = Effect.fn("captureSdkExecutablePaths")(functio
             applyFlagSettings: () => Effect.void,
             setPermissionMode: () => Effect.void,
             backgroundTasks: () => Effect.succeed(false),
+            mcpServerStatus: Effect.succeed([]),
+            reconnectMcpServer: () => Effect.void,
+            toggleMcpServer: () => Effect.void,
             stopTask: () => Effect.void,
             interrupt: Effect.void,
             close: Effect.void,
@@ -1196,6 +1205,9 @@ describe("ClaudeAdapterV2 resume compaction", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   backgroundTasks: () => Effect.succeed(false),
+                  mcpServerStatus: Effect.succeed([]),
+                  reconnectMcpServer: () => Effect.void,
+                  toggleMcpServer: () => Effect.void,
                   stopTask: () => Effect.void,
                   interrupt: Effect.void,
                   close: Effect.void,
@@ -1446,6 +1458,9 @@ describe("ClaudeAdapterV2 attachments", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   backgroundTasks: () => Effect.succeed(false),
+                  mcpServerStatus: Effect.succeed([]),
+                  reconnectMcpServer: () => Effect.void,
+                  toggleMcpServer: () => Effect.void,
                   stopTask: () => Effect.void,
                   interrupt: Effect.void,
                   close: Effect.void,
@@ -1594,6 +1609,9 @@ describe("ClaudeAdapterV2 native fork", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   backgroundTasks: () => Effect.succeed(false),
+                  mcpServerStatus: Effect.succeed([]),
+                  reconnectMcpServer: () => Effect.void,
+                  toggleMcpServer: () => Effect.void,
                   stopTask: () => Effect.void,
                   interrupt: Effect.void,
                   close: Effect.void,
@@ -1875,6 +1893,9 @@ describe("ClaudeAdapterV2 native session identity", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   backgroundTasks: () => Effect.succeed(false),
+                  mcpServerStatus: Effect.succeed([]),
+                  reconnectMcpServer: () => Effect.void,
+                  toggleMcpServer: () => Effect.void,
                   stopTask: () => Effect.void,
                   interrupt: Effect.void,
                   close: Effect.void,
@@ -2147,6 +2168,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     readonly backgroundTasks?: (
       toolUseId: string,
     ) => Effect.Effect<boolean, ClaudeAdapterV2.ClaudeAgentSdkQueryRunnerError>;
+    readonly mcpServerStatus?: ClaudeAdapterV2.ClaudeAgentSdkQuerySession["mcpServerStatus"];
+    readonly toggleMcpServer?: ClaudeAdapterV2.ClaudeAgentSdkQuerySession["toggleMcpServer"];
     readonly environment?: NodeJS.ProcessEnv;
     readonly subagentLaunchToolUseId?: string;
     readonly nativeSessionId?: string;
@@ -2265,6 +2288,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                       Effect.andThen(() => options?.setPermissionMode?.(mode) ?? Effect.void),
                     ),
                   backgroundTasks: options?.backgroundTasks ?? (() => Effect.succeed(false)),
+                  mcpServerStatus: Effect.succeed([]),
+                  reconnectMcpServer: () => Effect.void,
+                  toggleMcpServer: () => Effect.void,
                   stopTask: options?.stopTask ?? (() => Effect.void),
                   interrupt: Effect.void,
                   close: Queue.shutdown(processMessages),
@@ -2290,6 +2316,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     permissionModeChanges.push(mode);
                   }).pipe(Effect.andThen(() => options?.setPermissionMode?.(mode) ?? Effect.void)),
                 backgroundTasks: options?.backgroundTasks ?? (() => Effect.succeed(false)),
+                mcpServerStatus: options?.mcpServerStatus ?? Effect.succeed([]),
+                reconnectMcpServer: () => Effect.void,
+                toggleMcpServer: options?.toggleMcpServer ?? (() => Effect.void),
                 stopTask: options?.stopTask ?? (() => Effect.void),
                 interrupt: options?.interrupt ?? Effect.void,
                 close: options?.close?.(sdkMessages) ?? Effect.void,
@@ -2382,6 +2411,69 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       };
     });
   const makeWakeHarness = makeWakeHarnessWithOptions();
+
+  it.effect("lists and toggles MCP servers only on the thread's live Claude query", () =>
+    Effect.gen(function* () {
+      const toggles: Array<{ readonly name: string; readonly enabled: boolean }> = [];
+      let enabled = true;
+      const harness = yield* makeWakeHarnessWithOptions({
+        mcpServerStatus: Effect.sync(() => [
+          { name: "issues", status: enabled ? "connected" : "disabled", scope: "user" },
+        ]),
+        toggleMcpServer: (name, next) =>
+          Effect.sync(() => {
+            toggles.push({ name, enabled: next });
+            enabled = next;
+          }),
+      });
+      const mcpServers = harness.runtime.mcpServers;
+      assert.isDefined(mcpServers);
+      if (mcpServers === undefined) return;
+      const providerThread = harness.providerThread;
+      assert.isTrue(Option.isNone(yield* mcpServers.list({ providerThread })));
+      yield* harness.runtime.startTurn(
+        makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread,
+          now: yield* DateTime.now,
+          attemptId: RunAttemptId.make("attempt-mcp-servers"),
+          text: "Check the issues server.",
+          attachments: [],
+        }),
+      );
+      assert.deepEqual(
+        yield* mcpServers.list({ providerThread }),
+        Option.some([{ name: "issues", status: "connected", scope: "user", tools: [] }]),
+      );
+      const otherThread = {
+        ...providerThread,
+        nativeThreadRef: {
+          driver: providerThread.driver,
+          nativeId: "other-session",
+          strength: "strong" as const,
+        },
+      };
+      assert.isTrue(
+        Option.isNone(
+          yield* mcpServers.setEnabled({
+            providerThread: otherThread,
+            server: "issues",
+            enabled: false,
+          }),
+        ),
+      );
+      assert.deepEqual(toggles, []);
+      assert.deepEqual(
+        yield* mcpServers.setEnabled({ providerThread, server: "issues", enabled: false }),
+        Option.some([{ name: "issues", status: "disabled", scope: "user", tools: [] }]),
+      );
+      assert.deepEqual(toggles, [{ name: "issues", enabled: false }]);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
 
   describe("Claude settings restrictions", () => {
     it.effect("resolves cached managed policy from the configured home through the real SDK", () =>
@@ -6564,6 +6656,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   backgroundTasks: () => Effect.succeed(false),
+                  mcpServerStatus: Effect.succeed([]),
+                  reconnectMcpServer: () => Effect.void,
+                  toggleMcpServer: () => Effect.void,
                   stopTask: () => Effect.void,
                   interrupt: Effect.void,
                   close: isFirstProcess
@@ -6757,6 +6852,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     applyFlagSettings: () => Effect.void,
                     setPermissionMode: () => Effect.void,
                     backgroundTasks: () => Effect.succeed(false),
+                    mcpServerStatus: Effect.succeed([]),
+                    reconnectMcpServer: () => Effect.void,
+                    toggleMcpServer: () => Effect.void,
                     stopTask: () => Effect.void,
                     interrupt: Effect.void,
                     close: Queue.shutdown(queue),
@@ -10523,6 +10621,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   backgroundTasks: () => Effect.succeed(false),
+                  mcpServerStatus: Effect.succeed([]),
+                  reconnectMcpServer: () => Effect.void,
+                  toggleMcpServer: () => Effect.void,
                   stopTask: () => Effect.void,
                   interrupt: Effect.void,
                   close: Queue.shutdown(sdkMessages),
@@ -10692,6 +10793,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     applyFlagSettings: () => Effect.void,
                     setPermissionMode: () => Effect.void,
                     backgroundTasks: () => Effect.succeed(false),
+                    mcpServerStatus: Effect.succeed([]),
+                    reconnectMcpServer: () => Effect.void,
+                    toggleMcpServer: () => Effect.void,
                     stopTask: () => Effect.void,
                     interrupt: Effect.void,
                     close: Queue.shutdown(sdkMessages),
@@ -10864,6 +10968,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   backgroundTasks: () => Effect.succeed(false),
+                  mcpServerStatus: Effect.succeed([]),
+                  reconnectMcpServer: () => Effect.void,
+                  toggleMcpServer: () => Effect.void,
                   stopTask: () => Effect.void,
                   interrupt: Effect.void,
                   close: Queue.shutdown(sdkMessages),
@@ -11035,6 +11142,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   backgroundTasks: () => Effect.succeed(false),
+                  mcpServerStatus: Effect.succeed([]),
+                  reconnectMcpServer: () => Effect.void,
+                  toggleMcpServer: () => Effect.void,
                   stopTask: () => Effect.void,
                   interrupt: Effect.void,
                   close: Effect.sync(() => {
@@ -11173,6 +11283,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     applyFlagSettings: () => Effect.void,
                     setPermissionMode: () => Effect.void,
                     backgroundTasks: () => Effect.succeed(false),
+                    mcpServerStatus: Effect.succeed([]),
+                    reconnectMcpServer: () => Effect.void,
+                    toggleMcpServer: () => Effect.void,
                     stopTask: () => Effect.void,
                     interrupt: Effect.void,
                     close: Queue.shutdown(sdkMessages),

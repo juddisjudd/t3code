@@ -15,6 +15,7 @@ import {
   withMessageContext,
   makeThreadErrorSetter,
 } from "../ChatView.logic";
+import { isMcpServersCommand } from "@t3tools/shared/mcpServersCommand";
 import { isUsageLimitsCommand } from "@t3tools/shared/usageLimits";
 import {
   AuthOrchestrationOperateScope,
@@ -209,6 +210,7 @@ interface ComposerSendInput {
   readonly usageLimitsOffered: boolean;
   readonly openUsageLimits: UsageLimitsPanel["open"];
   readonly clearUsageLimitsFor: UsageLimitsPanel["clearFor"];
+  readonly openMcpServers: (() => void) | null;
   readonly needsLoadBalancing: boolean;
   readonly loadBalancing: DraftEnvironmentRouting["loadBalancing"];
   readonly readPendingEnvironmentChange: DraftEnvironmentRouting["readPendingEnvironmentChange"];
@@ -296,6 +298,7 @@ export function useComposerSend(input: ComposerSendInput) {
     usageLimitsOffered,
     openUsageLimits,
     clearUsageLimitsFor,
+    openMcpServers,
     needsLoadBalancing,
     loadBalancing,
     readPendingEnvironmentChange,
@@ -408,6 +411,18 @@ export function useComposerSend(input: ComposerSendInput) {
         setComposerDraftPrompt(composerDraftTarget, "");
         composerRef.current?.resetCursorState();
       }
+      return;
+    }
+    if (
+      openMcpServers !== null &&
+      !directAnnotation &&
+      !draftHasNonPromptContent(composerDraftTarget) &&
+      isMcpServersCommand(promptRef.current)
+    ) {
+      openMcpServers();
+      promptRef.current = "";
+      setComposerDraftPrompt(composerDraftTarget, "");
+      composerRef.current?.resetCursorState();
       return;
     }
 

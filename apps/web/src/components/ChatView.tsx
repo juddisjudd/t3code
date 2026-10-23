@@ -85,6 +85,7 @@ import {
 } from "@t3tools/client-runtime/state/subagentRuntime";
 import { threadSupportsProviderHandoff } from "@t3tools/client-runtime/state/thread-workflows";
 import { resolvePendingHandoff } from "@t3tools/client-runtime/handoff";
+import { offersThreadMcpServers } from "@t3tools/client-runtime/thread-mcp-servers";
 import { HandoffRow } from "./chat/V2LifecycleRow";
 import {
   codexFeedbackMessage,
@@ -251,7 +252,9 @@ import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/Expand
 import {
   BranchRestoreConfirmHost,
   DeviceSetupDialogHost,
+  McpServersDialogHost,
   openBranchRestoreConfirm,
+  openMcpServersDialog,
   PullRequestThreadDialogHost,
   RevertConfirmHost,
 } from "./chat/ChatOverlayHosts";
@@ -1352,6 +1355,12 @@ export default function ChatView(props: ChatViewProps) {
     providers: providerStatuses,
     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
   });
+  const mcpServersThreadId =
+    isServerThread && offersThreadMcpServers(activeProviderStatus?.driver)
+      ? (activeThread?.id ?? null)
+      : null;
+  const openMcpServers =
+    mcpServersThreadId === null ? null : () => openMcpServersDialog(routeThreadKey);
   const {
     beginLocalDispatch,
     resetLocalDispatch,
@@ -2907,6 +2916,7 @@ export default function ChatView(props: ChatViewProps) {
     usageLimitsOffered,
     openUsageLimits,
     clearUsageLimitsFor,
+    openMcpServers,
     needsLoadBalancing,
     loadBalancing,
     readPendingEnvironmentChange,
@@ -3563,6 +3573,11 @@ export default function ChatView(props: ChatViewProps) {
                                   ? openUsageLimits
                                   : undefined
                               }
+                              onMcpServersCommand={
+                                openMcpServers !== null && !composerHasNonPromptContent
+                                  ? openMcpServers
+                                  : undefined
+                              }
                               environmentUnavailable={activeEnvironmentUnavailableState}
                               activePendingApproval={activePendingApproval}
                               pendingApprovals={pendingApprovals}
@@ -3910,6 +3925,11 @@ export default function ChatView(props: ChatViewProps) {
       <LinkPullRequestDialogHost />
       <ThreadVisitWatermark threadRef={routeThreadRef} />
       <ExpandedImageDialogHost threadKey={routeThreadKey} />
+      <McpServersDialogHost
+        threadKey={routeThreadKey}
+        environmentId={environmentId}
+        threadId={mcpServersThreadId}
+      />
     </div>
   );
   return (
